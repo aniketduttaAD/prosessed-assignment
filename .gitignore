@@ -1,0 +1,34 @@
+# Node / TypeScript
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+
+# Build outputs
+dist
+build
+.turbo
+
+# Next.js
+.next
+.vercel
+out
+
+# Prisma
+backend/prisma/migrations/**/shadow.db
+
+# Generated artifacts
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+*/.env
+.env.local
+.env.*.local
+
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+
