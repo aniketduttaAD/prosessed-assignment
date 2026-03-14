@@ -99,13 +99,17 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   async markAttendance(payload) {
+    const { dayStatuses, monthSummary } = get();
+    const prevStatus = dayStatuses[payload.date]?.[payload.employeeId] as
+      | "PRESENT"
+      | "ABSENT"
+      | undefined;
     set({ loading: true, error: null });
     try {
       await apiFetch<AttendanceRecord>("/attendance", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      const { dayStatuses } = get();
       const status = payload.status as "PRESENT" | "ABSENT";
       const nextDayStatuses = {
         ...dayStatuses,
@@ -115,6 +119,29 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
         },
       };
       set({ dayStatuses: nextDayStatuses, loading: false });
+
+      if (monthSummary) {
+        const day = monthSummary.days[payload.date] ?? {
+          present: 0,
+          absent: 0,
+        };
+        let present = day.present;
+        let absent = day.absent;
+        if (prevStatus === "PRESENT") present--;
+        if (prevStatus === "ABSENT") absent--;
+        if (status === "PRESENT") present++;
+        if (status === "ABSENT") absent++;
+        set({
+          monthSummary: {
+            ...monthSummary,
+            days: {
+              ...monthSummary.days,
+              [payload.date]: { present, absent },
+            },
+          },
+        });
+      }
+
       return { ok: true as const };
     } catch (err: unknown) {
       set({

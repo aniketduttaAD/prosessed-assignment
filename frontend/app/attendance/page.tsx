@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Calendar } from "../../components/Calendar";
 import { useEmployeeStore } from "../../store/employeeStore";
 import { useAttendanceStore } from "../../store/attendanceStore";
@@ -81,10 +81,16 @@ type AttendanceDayModalProps = {
 };
 
 function AttendanceDayModal({ date, onClose }: AttendanceDayModalProps) {
-  const { employees, fetchEmployees } = useEmployeeStore();
+  const {
+    employees,
+    fetchEmployees,
+    loading,
+    hasMore,
+    error: employeesError,
+  } = useEmployeeStore();
   const {
     markAttendance,
-    loading,
+    loading: markLoading,
     dayStatuses,
     dayStatusLoading,
     dayStatusError,
@@ -92,6 +98,11 @@ function AttendanceDayModal({ date, onClose }: AttendanceDayModalProps) {
     fetchDayStatus,
     clearDayStatusError,
   } = useAttendanceStore();
+
+  const [search, setSearch] = useState("");
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const isFetchingMoreRef = useRef(false);
 
   const isoDate = date.toISOString().slice(0, 10);
   const statusByEmployee = dayStatuses[isoDate] ?? {};
@@ -104,18 +115,39 @@ function AttendanceDayModal({ date, onClose }: AttendanceDayModalProps) {
 
   useEffect(() => {
     clearDayStatusError();
-    const load = async () => {
-      if (employees.length === 0) await fetchEmployees();
-      await fetchDayStatus(isoDate);
+    fetchEmployees({ reset: true, search: "" });
+    fetchDayStatus(isoDate);
+  }, [isoDate, clearDayStatusError, fetchDayStatus, fetchEmployees]);
+
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      fetchEmployees({ reset: true, search });
+    }, 300);
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-    load();
-  }, [
-    isoDate,
-    clearDayStatusError,
-    fetchDayStatus,
-    fetchEmployees,
-    employees.length,
-  ]);
+  }, [search, fetchEmployees]);
+
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (
+        entry.isIntersecting &&
+        !loading &&
+        hasMore &&
+        !isFetchingMoreRef.current
+      ) {
+        isFetchingMoreRef.current = true;
+        fetchEmployees({ search }).finally(() => {
+          isFetchingMoreRef.current = false;
+        });
+      }
+    });
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [fetchEmployees, loading, hasMore, search]);
 
   const handleMark = async (
     employeeId: number,
@@ -131,7 +163,7 @@ function AttendanceDayModal({ date, onClose }: AttendanceDayModalProps) {
     }
   };
 
-  const error = dayStatusError ?? markError;
+  const error = dayStatusError ?? markError ?? employeesError;
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
@@ -158,49 +190,89 @@ function AttendanceDayModal({ date, onClose }: AttendanceDayModalProps) {
           </button>
         </div>
         <div className="modal-body">
-          {(dayStatusLoading || employees.length === 0) && (
-            <p>Loading employees...</p>
+          <div className="filter-bar attendance-modal-filter">
+            <div className="filter-group filter-group-wide filter-group-search">
+              <label className="filter-label">
+                Search employees
+                <input
+                  type="text"
+                  placeholder="Search by name, ID, email, or department"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
+          {loading && employees.length === 0 ? (
+            <p>Loading employees…</p>
+          ) : dayStatusLoading ? (
+            <p>Loading attendance…</p>
+          ) : (
+            <>
+              {employeesError && (
+                <p className="error" style={{ marginTop: "0.5rem" }}>
+                  {employeesError}
+                </p>
+              )}
+              {!dayStatusLoading &&
+                !loading &&
+                employees.length === 0 &&
+                !employeesError && <p>No employees match your search.</p>}
+            </>
           )}
           {!dayStatusLoading && employees.length > 0 && (
-            <ul className="attendance-list">
-              {employees.map((emp) => {
-                const currentStatus = statusByEmployee[emp.id];
-                return (
-                  <li key={emp.id} className="attendance-list-row">
-                    <div className="attendance-list-info">
-                      <div className="attendance-list-name">{emp.fullName}</div>
-                      <div className="attendance-list-id">{emp.employeeId}</div>
-                    </div>
-                    <div className="attendance-list-actions">
-                      <button
-                        type="button"
-                        className={
-                          currentStatus === "ABSENT"
-                            ? "btn btn-danger"
-                            : "btn btn-ghost btn-absent"
-                        }
-                        disabled={loading || !isEditable}
-                        onClick={() => handleMark(emp.id, "ABSENT")}
-                      >
-                        Absent
-                      </button>
-                      <button
-                        type="button"
-                        className={
-                          currentStatus === "PRESENT"
-                            ? "btn btn-primary"
-                            : "btn btn-ghost btn-present"
-                        }
-                        disabled={loading || !isEditable}
-                        onClick={() => handleMark(emp.id, "PRESENT")}
-                      >
-                        Present
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <ul className="attendance-list">
+                {employees.map((emp) => {
+                  const currentStatus = statusByEmployee[emp.id];
+                  return (
+                    <li key={emp.id} className="attendance-list-row">
+                      <div className="attendance-list-info">
+                        <div className="attendance-list-name">
+                          {emp.fullName}
+                        </div>
+                        <div className="attendance-list-id">
+                          {emp.employeeId}
+                        </div>
+                      </div>
+                      <div className="attendance-list-actions">
+                        <button
+                          type="button"
+                          className={
+                            currentStatus === "ABSENT"
+                              ? "btn btn-danger"
+                              : "btn btn-ghost btn-absent"
+                          }
+                          disabled={markLoading || !isEditable}
+                          onClick={() => handleMark(emp.id, "ABSENT")}
+                        >
+                          Absent
+                        </button>
+                        <button
+                          type="button"
+                          className={
+                            currentStatus === "PRESENT"
+                              ? "btn"
+                              : "btn btn-ghost btn-present"
+                          }
+                          disabled={markLoading || !isEditable}
+                          onClick={() => handleMark(emp.id, "PRESENT")}
+                        >
+                          Present
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div ref={loadMoreRef} />
+              {loading && hasMore && (
+                <div className="employee-list-loading">
+                  Loading more employees…
+                </div>
+              )}
+            </>
           )}
           {error && (
             <p className="error" style={{ marginTop: "0.75rem" }}>

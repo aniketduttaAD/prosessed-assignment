@@ -17,7 +17,6 @@ export function EmployeeDashboard() {
   } = useEmployeeStore();
 
   const [search, setSearch] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -25,7 +24,7 @@ export function EmployeeDashboard() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    fetchEmployees({ reset: true, search, department: departmentFilter });
+    fetchEmployees({ reset: true, search });
   }, []);
 
   useEffect(() => {
@@ -40,7 +39,7 @@ export function EmployeeDashboard() {
         !isFetchingMoreRef.current
       ) {
         isFetchingMoreRef.current = true;
-        fetchEmployees({ search, department: departmentFilter }).finally(() => {
+        fetchEmployees({ search }).finally(() => {
           isFetchingMoreRef.current = false;
         });
       }
@@ -51,7 +50,7 @@ export function EmployeeDashboard() {
     return () => {
       observer.disconnect();
     };
-  }, [fetchEmployees, loading, hasMore, search, departmentFilter]);
+  }, [fetchEmployees, loading, hasMore, search]);
 
   useEffect(() => {
     if (debounceTimerRef.current) {
@@ -59,7 +58,7 @@ export function EmployeeDashboard() {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      fetchEmployees({ reset: true, search, department: departmentFilter });
+      fetchEmployees({ reset: true, search });
     }, 300);
 
     return () => {
@@ -67,11 +66,7 @@ export function EmployeeDashboard() {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [search, departmentFilter, fetchEmployees]);
-
-  const departments = Array.from(
-    new Set(employees.map((e) => e.department).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b));
+  }, [search, fetchEmployees]);
 
   const handleDelete = async (id: number) => {
     setDeletingId(id);
@@ -84,16 +79,16 @@ export function EmployeeDashboard() {
 
   return (
     <section>
-      <div className="card dashboard-card">
+      <div className="card">
         <div className="dashboard-stats">
-          <div className="dashboard-stat dashboard-stat-employees">
+          <div className="dashboard-stat">
             <div className="dashboard-stat-label">Total Employees</div>
             <div className="dashboard-stat-value">
               {loading && totalEmployees === 0 ? "---" : totalEmployees}
             </div>
           </div>
 
-          <div className="dashboard-stat dashboard-stat-departments">
+          <div className="dashboard-stat">
             <div className="dashboard-stat-label">Departments</div>
             <div className="dashboard-stat-value">
               {loading && totalDepartments === 0 ? "---" : totalDepartments}
@@ -116,30 +111,17 @@ export function EmployeeDashboard() {
             </label>
           </div>
 
-          <div className="filter-group filter-group-department">
-            <label className="filter-label">
-              Department
-              <select
-                value={departmentFilter}
-                onChange={(e) => setDepartmentFilter(e.target.value)}
-              >
-                <option value="all">All departments</option>
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="filter-group filter-group-narrow filter-group-actions">
+          <div className="filter-group filter-group-actions">
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn dashboard-add-btn"
               onClick={() => setIsAddOpen(true)}
+              aria-label="Add new employee"
             >
-              + Add New Employee
+              <span className="dashboard-add-btn-icon" aria-hidden>
+                +
+              </span>
+              <span className="dashboard-add-btn-text">Add New Employee</span>
             </button>
           </div>
         </div>

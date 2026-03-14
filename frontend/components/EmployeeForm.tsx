@@ -349,11 +349,7 @@ export function EmployeeForm({ onClose }: EmployeeFormProps) {
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={loading}
-              >
+              <button type="submit" className="btn" disabled={loading}>
                 {loading ? "Saving…" : "Add Employee"}
               </button>
             </div>
